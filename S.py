@@ -33,7 +33,7 @@ class swich(app_manager):
         action = [ofproto_parser.OFPActionOutput(ofproto.OFPP_NORMAL)]  # (port,max)
         self.send_flow_mod(datapath, 0, match, action)
 
-    def send_flow_mod(self, datapath, priority, match, actions):
+    def send_flow_mod(self, datapath, priority, match, actions,buffer_id=None):
         """"
             send flow table
         """
@@ -51,7 +51,7 @@ class swich(app_manager):
             idle_timeout=idle_timeout,
             hard_timeout=hard_timeout,
             priority=priority,
-            buffer_id="",
+            buffer_id=buffer_id,
             out_port="",
             out_group="",
             flags="",
@@ -61,7 +61,7 @@ class swich(app_manager):
         )
         datapath.send_msg(Out) #The controller sends this message to modify the flow table.
 
-    def arp_process(self, datapath, eth, a, in_port):
+    def arp_process(self, datapath, eth, a, in_port,buffer_id):
         # -------- Check database -------------------
         r = arp_table.get(a.dst_ip)
         # ----------------------------
@@ -113,10 +113,10 @@ class swich(app_manager):
         # Check whether is it arp packet
         if pkt_ethernet.ether_types == ether_types.ETH_TYPE_ARP:
             a = pkt.get_protocol(arp.arp)
-            self.arp_process(datapath, pkt_ethernet, a, in_port)
+            self.arp_process(datapath, pkt_ethernet, a, in_port,msg.buffer_id)
             return
 
-        # If the packet is not arp packet
+        # If the packet is not the arp packet
         if dst in self.Mac_Port_Table[dpid]:
             out_port = self.Mac_Port_Table[dpid][dst]
         else:
@@ -124,5 +124,16 @@ class swich(app_manager):
 
         actions = [ofproto_parser.OFPActionOutput(out_port)]
         # install a flow to avoid packet_in next time
-        if out_port != ofproto.OFPP_FLOOD :
+        if out_port != ofproto.OFPP_FLOOD : #out_port is define
             match = ofproto_parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_src=src)
+            if msg.buffer_id != ofproto.OFP_NO_BUFFER:
+                self.send_flow_mod(datapath,1,match,actions,msg.buffer_id)
+                return
+            else:
+                self.send_flow_mod(datapath, 1, match, actions)
+        data = None
+        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+            data = msg.data
+        out = ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
+                                  in_port=in_port, actions=actions, data=data)
+        datapath.send_msg(out)
