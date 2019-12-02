@@ -90,7 +90,7 @@ class swich(app_manager):
             datapath.send_msg(Out)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def apccept_packet_in(self, ev):
+    def packet_in_handler(self, ev):
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
@@ -115,7 +115,6 @@ class swich(app_manager):
             a = pkt.get_protocol(arp.arp)
             self.arp_process(datapath, pkt_ethernet, a, in_port,msg.buffer_id)
             return
-
         # If the packet is not the arp packet
         if dst in self.Mac_Port_Table[dpid]:
             out_port = self.Mac_Port_Table[dpid][dst]
