@@ -18,17 +18,14 @@ class swich(app_manager):
 
     def __init__(self, *args, **kwargs):
         super(swich, self).__init__(*args, **kwargs)
-        self.Mac_Port_Table = {}  # mac learn
+        self.Mac_Port_Table = {}  # mac learn, change
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         ofproto_parser = datapath.ofproto_parser
-        match = ofproto_parser.OFPMatch(
-            in_port = "",
-            eth_dst = "",
-        )
+        match = ofproto_parser.OFPMatch()
 
         action = [ofproto_parser.OFPActionOutput(ofproto.OFPP_NORMAL)]  # (port,max)
         self.send_flow_mod(datapath, 0, match, action)

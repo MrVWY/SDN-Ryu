@@ -121,22 +121,22 @@ class swich(app_manager):
             next(opt for opt in disc.options.option_list if opt.tag == 12))
         #insert pkt.dhcp.option.option_list , tag = 1 (Subnet Mask)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=1, value=self.bin_netmask))
+            0, dhcp.option(tag=1, value=""))
         # insert pkt.dhcp.option.option_list , tag = 3 (Router)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=3, value=self.bin_server))
+            0, dhcp.option(tag=3, value=""))
         # insert pkt.dhcp.option.option_list , tag = 6 (Domain Name Server 域名服务器)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=6, value=self.bin_dns))
+            0, dhcp.option(tag=6, value=""))
         # insert pkt.dhcp.option.option_list , tag = 12 (Host Name)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=12, value=self.hostname))
+            0, dhcp.option(tag=12, value=""))
         # insert pkt.dhcp.option.option_list , tag = 53 (DHCP Message Type)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=53, value='02'.decode('hex')))
+            0, dhcp.option(tag=53, value=''))
         # insert pkt.dhcp.option.option_list , tag = 54 (Server Identifier)
         disc.options.option_list.insert(
-            0, dhcp.option(tag=54, value=self.bin_server))
+            0, dhcp.option(tag=54, value=""))
 
 
         #Constructing a Packet
@@ -158,3 +158,27 @@ class swich(app_manager):
                                          xid=disc.xid,
                                          options=disc.options))
         return offer_pkt
+
+    def assemble_ack(self, pkt):
+        response_eth = pkt.get_protocol(ethernet.ethernet)
+        response_ipv4 = pkt.get_protocol(ipv4.ipv4)
+        response = pkt.get_protocol(dhcp.dhcp)
+        response.options.option_list.remove(
+            next(opt for opt in response.options.option_list if opt.tag == 53))
+        response.options.option_list.insert(0, dhcp.option(tag=51, value=''))
+        response.options.option_list.insert(
+            0, dhcp.option(tag=53, value=""))
+
+        ack_pkt = packet.Packet()
+        ack_pkt.add_protocol(ethernet.ethernet(
+            ethertype=response_eth.ethertype, dst=response_eth.src, src=""))
+        ack_pkt.add_protocol(
+            ipv4.ipv4(dst=response_ipv4.dst, src=self.dhcp_server, proto=response_ipv4.proto))
+        ack_pkt.add_protocol(udp.udp(src_port=67, dst_port=68))
+        ack_pkt.add_protocol(dhcp.dhcp(op=2, chaddr=response_eth.src,
+                                       siaddr="dhcp_server",
+                                       boot_file=response.boot_file,
+                                       yiaddr="ip_addr",
+                                       xid=response.xid,
+                                       options=response.options))
+        return ack_pkt
