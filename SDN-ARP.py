@@ -68,28 +68,47 @@ class swich(app_manager):
             self.arp_process(datapath,pkt_ethernet,pkt_arp,in_port)
 
     def arp_process(self, datapath, pkt_ethernet, pkt_arp, in_port):
+        """
+        ARP : {
+            Attribute     Description                                    Example
+            hwtype        Hardware address.
+            proto	      Protocol address.
+            hlen	      byte length of each hardware address.
+            plen	      byte length of each protocol address.
+            opcode	      operation codes.(Opcode 1: ARP Request(请求)。Opcode 2: ARP Reply(应答))
+            src_mac	      Hardware address of sender.	                 '08:60:6e:7f:74:e7'
+            src_ip	      Protocol address of sender.	                 '192.0.2.1'
+            dst_mac	      Hardware address of target.	                 '00:00:00:00:00:00'
+            dst_ip	      Protocol address of target.	                 '192.0.2.2'
+        }
+        :param datapath:
+        :param pkt_ethernet:
+        :param pkt_arp:
+        :param in_port:
+        :return:
+        """
         if pkt_arp.opcode != arp.ARP_REQUEST:
-            return 
+            return
         # -------- Check database -------------------
-        r = arp_table.get(pkt_arp.dst_ip)
+        dst_mac = arp_table.get(pkt_arp.dst_ip)
         # ----------------------------
-        if len(r) != 0:
+        if len(dst_mac) != 0:
             arp_resp = packet.Packet()  # Construct a packet
             arp_resp.add_protocol(ethernet.ethernet(
                 dst=pkt_ethernet.src, #目的地址
                 src=r, #发送地址
                 ethertype=pkt_ethernet.ethertype
-            ))  # define ethernet protocol
+            ))
             arp_resp.add_protocol(arp.arp(
-                opcode=arp.ARP_REPLY,  # arp reply
-                # 发送地址
-                src_mac=r,
+                opcode=arp.ARP_REPLY,
+                # Target IP and MAC
+                src_mac=dst_mac,
                 src_ip=pkt_arp.dst_ip,
-                # 目的地址
+                # Source IP and MAC
                 dst_mac=pkt_arp.src_mac,
                 dst_ip=pkt_arp.src_ip
-            ))  # define arp packet
-            arp_resp.serialize()  # Encode a packet
+            ))
+            arp_resp.serialize()
             ofproto_parser = datapath.ofproto_parser
             ofproto = datapath.ofproto
             actions = [ofproto.OFPActionOutput(in_port)]
