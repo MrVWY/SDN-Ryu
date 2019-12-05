@@ -108,6 +108,6 @@ class swich(app_manager):
             ofproto_parser = datapath.ofproto_parser
 
             ofproto = datapath.ofproto
-            actions = [ofproto.OFPActionOutput(ofproto.OFPP_FLOOD)]  #OFPP_FLOOD 发洪
+            actions = [ofproto.OFPActionOutput(in_port)]
             Out = ofproto_parser.OFPPacketOut(datapath, in_port, actions,arp_resp)  # What is buffer_id???
             datapath.send_msg(Out)
