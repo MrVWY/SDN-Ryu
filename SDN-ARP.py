@@ -45,13 +45,14 @@ class swich(app_manager):
         ofproto_parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
         dpid = datapath.dpid
+        #avoid ARP Flow
         self.Mac_Port_Table.setdefault(dpid, {})
 
         pkt = packet.Packet(msg.data)
         pkt_ethernet = pkt.get_protocol(ethernet.ethernet)
+        dst_mac = pkt_ethernet.dst  # controller MAC
+        src_mac = pkt_ethernet.src  # switch MAC
         if pkt_ethernet :
-            dst_mac = pkt_ethernet.dst  #controller MAC
-            src_mac = pkt_ethernet.src  #switch MAC
             self.Mac_Port_Table[dpid][src_mac] = in_port
         pkt_arp = pkt.get_protocol(arp.arp)
         if pkt_arp:
@@ -64,8 +65,13 @@ class swich(app_manager):
             print("pkt_arp:dst_ip: " + str(pkt_arp.dst_ip))
             print("pkt_arp:src_mac: " + str(pkt_arp.src_mac))
             print("pkt_arp:dst_mac: " + str(pkt_arp.dst_mac))
-
-            self.arp_process(datapath,pkt_ethernet,pkt_arp,in_port)
+            try:
+                if len(self.Mac_Port_Table[dpid][src_mac]) !=0 :
+                    self.arp_process(datapath,pkt_ethernet,pkt_arp,in_port)
+                else:
+                    pass
+            except BaseException:
+                    print("The ARP Packet-src_mac is illegal ")
 
     def arp_process(self, datapath, pkt_ethernet, pkt_arp, in_port):
         """
