@@ -28,30 +28,14 @@ class swich(app_manager):
         match = ofproto_parser.OFPMatch()
 
         action = [ofproto_parser.OFPActionOutput(ofproto.OFPP_NORMAL,ofproto.OFPCML_NO_BUFFER)]  # (port,max)
-        self.send_flow_mod(datapath, 0, match, action)
-
-    def send_flow_mod(self, datapath, priority, match, actions,buffer_id=None):
-        """"
-            send flow table
-        """
-        ofproto = datapath.ofproto
-        ofproto_parse = datapath.ofproto_parser
-
-        inst = [ofproto_parse.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
-        if  buffer_id:
-           Out = ofproto_parse.OFPFlowMod(
-               priority=priority,
-               buffer_id=buffer_id,
-               match=match,
-               instructions=inst,
-           )
-        else:
-            Out = ofproto_parse.OFPFlowMod(
-                priority=priority,
-                match=match,
-                instructions=inst,
-            )
-        datapath.send_msg(Out) #The controller sends this message to modify the flow table.
+        inst = [ofproto_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, action)]
+        Out = ofproto_parser.OFPFlowMod(
+            priority=0,
+            datapath=datapath,
+            match=match,
+            instructions=inst,
+        )
+        datapath.send_msg(Out)  # The controller sends this message to modify the flow table.
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
@@ -81,10 +65,11 @@ class swich(app_manager):
             print("pkt_arp:src_mac: " + str(pkt_arp.src_mac))
             print("pkt_arp:dst_mac: " + str(pkt_arp.dst_mac))
 
-            self.arp_process()
+            self.arp_process(datapath,pkt_ethernet,pkt_arp,in_port)
 
     def arp_process(self, datapath, pkt_ethernet, pkt_arp, in_port):
-        
+        if pkt_arp.opcode != arp.ARP_REQUEST:
+            return 
         # -------- Check database -------------------
         r = arp_table.get(pkt_arp.dst_ip)
         # ----------------------------
@@ -106,8 +91,7 @@ class swich(app_manager):
             ))  # define arp packet
             arp_resp.serialize()  # Encode a packet
             ofproto_parser = datapath.ofproto_parser
-
             ofproto = datapath.ofproto
             actions = [ofproto.OFPActionOutput(in_port)]
-            Out = ofproto_parser.OFPPacketOut(datapath, in_port, actions,arp_resp)  # What is buffer_id???
+            Out = ofproto_parser.OFPPacketOut(datapath, in_port, actions,arp_resp)
             datapath.send_msg(Out)
