@@ -27,7 +27,7 @@ class swich(app_manager):
         ofproto_parser = datapath.ofproto_parser
         match = ofproto_parser.OFPMatch()
 
-        action = [ofproto_parser.OFPActionOutput(ofproto.OFPP_NORMAL)]  # (port,max)
+        action = [ofproto_parser.OFPActionOutput(ofproto.OFPP_NORMAL,ofproto.OFPCML_NO_BUFFER)]  # (port,max)
         self.send_flow_mod(datapath, 0, match, action)
 
     def send_flow_mod(self, datapath, priority, match, actions,buffer_id=None):
@@ -37,54 +37,21 @@ class swich(app_manager):
         ofproto = datapath.ofproto
         ofproto_parse = datapath.ofproto_parser
 
-        idle_timeout = hard_timeout = 0
         inst = [ofproto_parse.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
-
-        Out = ofproto_parse.OFPFlowMod(
-            cookie="",
-            cookie_mask="",
-            table_id="",
-            command="",
-            idle_timeout=idle_timeout,
-            hard_timeout=hard_timeout,
-            priority=priority,
-            buffer_id=buffer_id,
-            out_port="",
-            out_group="",
-            flags="",
-            importance="",
-            match=match,
-            instructions=inst,
-        )
+        if  buffer_id:
+           Out = ofproto_parse.OFPFlowMod(
+               priority=priority,
+               buffer_id=buffer_id,
+               match=match,
+               instructions=inst,
+           )
+        else:
+            Out = ofproto_parse.OFPFlowMod(
+                priority=priority,
+                match=match,
+                instructions=inst,
+            )
         datapath.send_msg(Out) #The controller sends this message to modify the flow table.
-
-    def arp_process(self, datapath, eth, a, in_port,buffer_id):
-        # -------- Check database -------------------
-        r = arp_table.get(a.dst_ip)
-        # ----------------------------
-        if len(r) != 0:
-            arp_resp = packet.Packet()  # Construct a packet
-            arp_resp.add_protocol(ethernet.ethernet(
-                dst=eth.src, #目的地址
-                src=r, #发送地址
-                ethertype=eth.ethertype
-            ))  # define ethernet protocol
-            arp_resp.add_protocol(arp.arp(
-                opcode=arp.ARP_REPLY,  # arp reply
-                # 发送地址
-                src_mac=r,
-                src_ip=a.dst_ip,
-                # 目的地址
-                dst_mac=a.src_mac,
-                dst_ip=a.src_ip
-            ))  # define arp packet
-            arp_resp.serialize()  # Encode a packet
-            ofproto_parser = datapath.ofproto_parser
-
-            ofproto = datapath.ofproto
-            actions = [ofproto.OFPActionOutput(ofproto.OFPP_FLOOD)]  #OFPP_FLOOD 发洪
-            Out = ofproto_parser.OFPPacketOut(datapath, buffer_id, in_port, actions,arp_resp)  # What is buffer_id???
-            datapath.send_msg(Out)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
@@ -93,43 +60,54 @@ class swich(app_manager):
         ofproto = datapath.ofproto
         ofproto_parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
+        dpid = datapath.dpid
+        self.Mac_Port_Table.setdefault(dpid, {})
 
         pkt = packet.Packet(msg.data)
         pkt_ethernet = pkt.get_protocol(ethernet.ethernet)
+        if pkt_ethernet :
+            dst_mac = pkt_ethernet.dst  #controller MAC
+            src_mac = pkt_ethernet.src  #switch MAC
+            self.Mac_Port_Table[dpid][src_mac] = in_port
+        pkt_arp = pkt.get_protocol(arp.arp)
+        if pkt_arp:
+            print("datapath id: " + str(dpid))
+            print("port: " + str(in_port))
+            print("pkt_eth.dst: " + str(pkt_ethernet.dst))
+            print("pkt_eth.src: " + str(pkt_ethernet.src))
+            print("pkt_arp: " + str(pkt_arp))
+            print("pkt_arp:src_ip: " + str(pkt_arp.src_ip))
+            print("pkt_arp:dst_ip: " + str(pkt_arp.dst_ip))
+            print("pkt_arp:src_mac: " + str(pkt_arp.src_mac))
+            print("pkt_arp:dst_mac: " + str(pkt_arp.dst_mac))
 
-        if pkt_ethernet == ether_types.ETH_TYPE_LLDP:
-            return
-        #获取datapath(虚拟交换机的id), 用dpid初始化一个键值  写进数据库？
-        dpid = datapath.id
-        self.Mac_Port_Table.setdefault(dpid, {})
+            self.arp_process()
 
-        dst = pkt_ethernet.dst
-        src = pkt_ethernet.src
-        self.Mac_Port_Table[dpid][src] = in_port  # ["src":in_port] 写进数据库？
+    def arp_process(self, datapath, pkt_ethernet, pkt_arp, in_port):
+        
+        # -------- Check database -------------------
+        r = arp_table.get(pkt_arp.dst_ip)
+        # ----------------------------
+        if len(r) != 0:
+            arp_resp = packet.Packet()  # Construct a packet
+            arp_resp.add_protocol(ethernet.ethernet(
+                dst=pkt_ethernet.src, #目的地址
+                src=r, #发送地址
+                ethertype=pkt_ethernet.ethertype
+            ))  # define ethernet protocol
+            arp_resp.add_protocol(arp.arp(
+                opcode=arp.ARP_REPLY,  # arp reply
+                # 发送地址
+                src_mac=r,
+                src_ip=pkt_arp.dst_ip,
+                # 目的地址
+                dst_mac=pkt_arp.src_mac,
+                dst_ip=pkt_arp.src_ip
+            ))  # define arp packet
+            arp_resp.serialize()  # Encode a packet
+            ofproto_parser = datapath.ofproto_parser
 
-        # Check whether is it arp packet
-        if pkt_ethernet.ether_types == ether_types.ETH_TYPE_ARP:
-            a = pkt.get_protocol(arp.arp)
-            self.arp_process(datapath, pkt_ethernet, a, in_port,msg.buffer_id)
-            return
-        # If the packet is not the arp packet
-        if dst in self.Mac_Port_Table[dpid]:
-            out_port = self.Mac_Port_Table[dpid][dst]
-        else:
-            out_port = ofproto.OFPP_FLOOD
-
-        actions = [ofproto_parser.OFPActionOutput(out_port)]
-        # install a flow to avoid packet_in next time
-        if out_port != ofproto.OFPP_FLOOD : #out_port is define
-            match = ofproto_parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_src=src)
-            if msg.buffer_id != ofproto.OFP_NO_BUFFER:
-                self.send_flow_mod(datapath,1,match,actions,msg.buffer_id)
-                return
-            else:
-                self.send_flow_mod(datapath, 1, match, actions)
-        data = None
-        if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-            data = msg.data
-        out = ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                  in_port=in_port, actions=actions, data=data)
-        datapath.send_msg(out)
+            ofproto = datapath.ofproto
+            actions = [ofproto.OFPActionOutput(ofproto.OFPP_FLOOD)]  #OFPP_FLOOD 发洪
+            Out = ofproto_parser.OFPPacketOut(datapath, in_port, actions,arp_resp)  # What is buffer_id???
+            datapath.send_msg(Out)
