@@ -14,12 +14,13 @@ arp_table = {"10.0.0.1": "00:00:00:00:00:01",
              }
 
 
-class swich(app_manager):
+class swich(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(swich, self).__init__(*args, **kwargs)
         self.Mac_Port_Table = {}  # mac learn, change
 
+    #实现初始连接处理和公共函数--下发流表
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
