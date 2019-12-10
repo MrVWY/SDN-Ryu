@@ -103,7 +103,7 @@ class swich(app_manager.RyuApp):
             arp_resp = packet.Packet()  # Construct a packet
             arp_resp.add_protocol(ethernet.ethernet(
                 dst=pkt_ethernet.src, #目的地址
-                src=r, #发送地址
+                src=dst_mac, #发送地址
                 ethertype=pkt_ethernet.ethertype
             ))
             arp_resp.add_protocol(arp.arp(
