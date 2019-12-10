@@ -87,7 +87,7 @@ ryu的命令系统，例如：ryu-manager ×××××.py
   
 ### REST API   
 * 该REST_API类定义在ryu/app下(ofctl_rest.py)
-* 如何你没有了解过mininet,请移步到本人编写的[mininet简单文档](),可以帮你快速了解  
+* 如何你没有了解过mininet,请移步到编写的[mininet简单文档](),可以帮你快速了解  
 * 使用  
   （一）开启Ryu控制器
     ```
